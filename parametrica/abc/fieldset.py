@@ -1,6 +1,7 @@
 from typing import Any, Dict
 
 from .field import ABCField
+from ..utils import flatten_metadata_keys, flatten_dataset_keys
 
 class MetaFieldset(type):
 
@@ -148,10 +149,9 @@ class ABCMetaconfig(_FieldRW, metaclass=MetaFieldset):
 
         try:
             dataset = self.__io_class__.read()
-            self.__update__(dataset)        
+            if self.__update__(dataset):
+                self.__write__()        
         except FileNotFoundError:
-            self.__write__()
-        else:
             self.__write__()
         
     def __write__(self):
@@ -177,6 +177,16 @@ class ABCMetaconfig(_FieldRW, metaclass=MetaFieldset):
         return metadata
 
     def __update__(self, dataset: dict):
+        dirty = True
+        config_keys = flatten_metadata_keys(self.__metadata__())
+        data_set_keys = flatten_dataset_keys(dataset)
+        diff = config_keys - data_set_keys
+        for diff_key in diff:
+            if not diff_key.secert:
+                break
+        else:
+            dirty = False
+
         for field_name, value in dataset.items():
             if not field_name in self.__metafields__:
                 continue
@@ -185,6 +195,8 @@ class ABCMetaconfig(_FieldRW, metaclass=MetaFieldset):
                 self.__set_field__(field_name, field.__set_value__(value, self))
             except ValueError as e:
                 raise ValueError(f'{self.__class__.__name__} -> {e}') from e
+            
+        return dirty
 
 
 from ..io import ConfigIOInterface
